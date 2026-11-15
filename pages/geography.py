@@ -1,4 +1,6 @@
 """Geography — where borrowers were: states and the cities inside them. Has its own state filter."""
+from html import escape
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -111,12 +113,33 @@ def state_options(min_n):
              "disabled": s not in inc} for s in D.STATES]
 
 
+def _tooltip(r, metric, min_n):
+    """HTML for the map's tooltip card (shown by assets/hover.js, styled by .sba-tip in style.css)."""
+    code = str(r.State)
+    region = D.STATE_REGION.get(code, "")
+    pos = float(risk_pos(r.rate, NATIONAL))
+    color = NEUTRAL if 0.42 < pos < 0.58 else risk_colors([r.rate], NATIONAL)[0]  # near-average greys vanish on white
+    gap = (r.rate - NATIONAL) * 100
+    delta = "flat" if abs(gap) < 0.05 else ("up" if gap > 0 else "down")
+    rows = [("n", "Loans", f"{int(r.n):,}"), ("co", "Charged off", f"{int(r.co):,}"),
+            ("avg", "Average loan", money(r.avg)), ("loss", "Principal lost", money(r.loss))]
+    cells = "".join(f'<span class="{"hl" if key == metric else ""}">{label}</span>'
+                    f'<span class="{"hl" if key == metric else ""}">{value}</span>' for key, label, value in rows)
+    note = ("" if r.n >= min_n else
+            f'<div class="sba-tip-note">Left out of this page: fewer than {min_n:,} loans</div>')
+    return (f'<div class="sba-tip-head"><span class="sba-tip-title">{escape(str(r.name))}</span>'
+            f'<span class="sba-tip-tag">{code}{" · " + region if region else ""}</span></div>'
+            f'<div class="sba-tip-big"><span class="sba-tip-dot" style="background:{color}"></span>'
+            f'<b>{r.rate:.1%}</b><span>charged off</span>'
+            f'<span class="sba-tip-delta {delta}">{gap:+.1f} pts</span></div>'
+            f'<div class="sba-tip-rows">{cells}</div>{note}')
+
+
 def _map(metric, state, min_n):
     s = D.rate_by(D.DF, "State")
     s["avg"] = s["disb"] / s["n"]
     s["name"] = s["State"].map(D.STATE_NAMES)
     ok = s[s["n"] >= min_n]
-    s["note"] = np.where(s["n"] >= min_n, "", f"<br><i>Left out: fewer than {min_n:,} loans</i>")
     if metric == "rate":
         z, cs, zr, cb = risk_pos(s["rate"], NATIONAL), RISK_SCALE, (0, 1), risk_colorbar(NATIONAL)
     else:
@@ -126,10 +149,9 @@ def _map(metric, state, min_n):
         zr = (float(ok[col].min()), float(ok[col].max()))
         cb = dict(title=dict(text=title, font=dict(color=TEXT_2, size=11)), tickformat=fmt, thickness=10, len=0.75,
                   outlinewidth=0, tickfont=dict(color=MUTED, size=11))
-    hover = ("<b>%{customdata[0]}</b><br>Charge-off rate <b>%{customdata[3]:.1%}</b>"
-             "<br>%{customdata[2]:,} of %{customdata[1]:,} loans<br>Avg loan %{customdata[4]:$,.0f}"
-             "<br>Principal lost %{customdata[5]:$,.0f}%{customdata[6]}<extra></extra>")
-    custom = np.stack([s["name"], s["n"], s["co"], s["rate"], s["avg"], s["loss"], s["note"]], axis=-1)
+    # hover shows the tooltip card instead of Plotly's label (hoverinfo="none" still fires hover events)
+    tips = np.array([_tooltip(r, metric, min_n) for r in s.itertuples()], dtype=object)
+    hover = dict(hoverinfo="none", meta="sba-tooltip")
     zv_all = np.asarray(z, dtype=float)
     included = (s["n"] >= min_n).to_numpy()
     keep = included & np.array([(not state) or st_ == state for st_ in s["State"]])
@@ -140,10 +162,10 @@ def _map(metric, state, min_n):
         mp.add_choropleth(
             locations=s["State"][~keep], z=zv_all[~keep], zmin=zr[0], zmax=zr[1], locationmode="USA-states",
             colorscale=[[p_, mix(c_, SURFACE, FADE)] for p_, c_ in cs], showscale=False,
-            marker_line_color=SURFACE, marker_line_width=1, customdata=custom[~keep], hovertemplate=hover)
+            marker_line_color=SURFACE, marker_line_width=1, text=list(tips[~keep]), **hover)
     mp.add_choropleth(
         locations=s["State"][keep], z=zv_all[keep], zmin=zr[0], zmax=zr[1], locationmode="USA-states", colorscale=cs,
-        marker_line_color=SURFACE, marker_line_width=1, customdata=custom[keep], colorbar=cb, hovertemplate=hover)
+        marker_line_color=SURFACE, marker_line_width=1, text=list(tips[keep]), colorbar=cb, **hover)
     if state:
         mp.add_choropleth(locations=[state], z=[0], locationmode="USA-states", showscale=False,
                           colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]],

@@ -217,8 +217,13 @@ a { color: inherit; }
 .grid-2-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
 .span-2 { grid-column: span 2; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px 22px 14px; min-width: 0; }
+/* Cards side by side share their rows (header · chart · note), so titles, charts and notes line up
+   across a grid row however long each card's text is. Other grid children span the same rows. */
+.grid > .card { display: grid; grid-template-rows: subgrid; grid-row: span 3; row-gap: 0; }
+.grid > :not(.card) { grid-row: span 3; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px 16px; padding-bottom: 12px; }
-.card-head > div:first-child { flex: 1 1 280px; min-width: 0; }
+/* the title takes the full width in narrow cards; the colour key then drops below the subtitle */
+.card-head > div:first-child { flex: 1 1 440px; min-width: 0; }
 .card-head h3 { font-size: 15px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; color: var(--ink); }
 .card-head p { color: var(--muted); font-size: 13px; margin-top: 4px; line-height: 1.5; }
 .card-controls { flex-shrink: 0; }
@@ -267,8 +272,33 @@ a { color: inherit; }
 .js-plotly-plot .pielayer .slice path.surface.sba-dim { opacity: 0.45 !important; }
 .js-plotly-plot .choroplethlayer path.choroplethlocation { transform-box: fill-box; transform-origin: center;
   transition: transform 0.18s ease, filter 0.18s ease; }
-.js-plotly-plot .choroplethlayer path.choroplethlocation.sba-lift { transform: scale(1.12); stroke-width: 1.5px !important;
+.js-plotly-plot .choroplethlayer path.choroplethlocation.sba-lift { transform: scale(1.12); stroke-width: 0 !important;
   filter: drop-shadow(0 4px 6px rgba(14, 17, 22, 0.35)); }
+
+/* rich tooltip card: traces with meta="sba-tooltip" carry ready-made HTML in `text`; hover.js shows it */
+.sba-tip { position: fixed; z-index: 1000; left: 0; top: 0; width: 212px; padding: 10px 12px 9px; pointer-events: none;
+  border-radius: 11px; color: #2B313B; font-size: 11.5px;  /* darker than ink-2: stays 4.5:1 over dark states */
+  background: rgba(255, 255, 255, 0.55); border: 1px solid rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(6px) saturate(160%); backdrop-filter: blur(6px) saturate(160%);
+  box-shadow: 0 12px 28px -12px rgba(14, 17, 22, 0.28), 0 0 0 1px rgba(14, 17, 22, 0.06);
+  opacity: 0; transform: translateY(4px); transition: opacity 0.12s ease, transform 0.12s ease; }
+.sba-tip.on { opacity: 1; transform: none; }
+.sba-tip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sba-tip-title { font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: -0.01em; }
+.sba-tip-tag { font-size: 10px; font-weight: 600; color: #2B313B; background: rgba(14, 17, 22, 0.06); padding: 1px 6px;
+  border-radius: 999px; white-space: nowrap; }
+.sba-tip-big { display: flex; align-items: center; gap: 6px; margin-top: 6px; white-space: nowrap; }
+.sba-tip-big b { font-size: 17px; font-weight: 600; color: var(--ink); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.sba-tip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sba-tip-delta { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+.sba-tip-delta.up { color: var(--risk-ink); background: rgba(240, 106, 138, 0.16); }
+.sba-tip-delta.down { color: var(--safe); background: rgba(0, 112, 95, 0.12); }
+.sba-tip-delta.flat { color: var(--ink-2); background: rgba(14, 17, 22, 0.06); }
+.sba-tip-rows { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin-top: 7px; padding-top: 6px;
+  border-top: 1px solid rgba(14, 17, 22, 0.08); }
+.sba-tip-rows span:nth-child(even) { text-align: right; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.sba-tip-rows .hl { color: var(--ink); font-weight: 700; }
+.sba-tip-note { margin-top: 7px; padding: 4px 6px; border-radius: 6px; background: rgba(14, 17, 22, 0.05); font-size: 10.5px; color: var(--ink-2); }
 
 /* ---------- risk explorer ---------- */
 .risk-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }

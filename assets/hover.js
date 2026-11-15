@@ -5,7 +5,10 @@
      with a soft shadow tinted with its own colour, the other slices fade, and the centre label
      (an annotation named "center") shows that slice's share and count.
    - Map regions (choropleth): the hovered state grows around its own centre and lifts
-     with a drop shadow.
+     with a drop shadow (no outline).
+   - Rich tooltip card: a trace with meta="sba-tooltip" carries ready-made HTML per point in
+     `text` (and hoverinfo="none", so Plotly's own label stays hidden). The card follows the
+     cursor and flips to stay on screen; style.css styles it (.sba-tip).
 
    Plotly draws these shapes itself (map paths even have pointer-events: none) and re-applies
    their inline styles when it redraws, so CSS :hover can't drive this. Instead this hooks
@@ -109,9 +112,51 @@
     gd._sbaHover = { key: key, undo: undo, center: null };
   }
 
+  // ---- rich tooltip card -------------------------------------------------------
+  var tip = null;
+  function tipEl() {
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "sba-tip";
+      tip.setAttribute("role", "tooltip");
+      document.body.appendChild(tip);
+    }
+    return tip;
+  }
+  function placeTip(x, y) {
+    var t = tipEl();
+    var gap = 18;
+    var w = t.offsetWidth;
+    var h = t.offsetHeight;
+    var left = x + gap + w > window.innerWidth - 8 ? x - gap - w : x + gap;
+    var top = y + gap + h > window.innerHeight - 8 ? y - gap - h : y + gap;
+    t.style.left = Math.max(8, left) + "px";
+    t.style.top = Math.max(8, top) + "px";
+  }
+  function showTip(gd, pt, ev) {
+    var input = pt.data || {};
+    var html = input.text && input.text[pt.pointNumber];
+    if (!html) return hideTip(gd);
+    var t = tipEl();
+    if (t._html !== html) {
+      t.innerHTML = html; // built server-side from our own data (names escaped)
+      t._html = html;
+    }
+    t.classList.add("on");
+    gd._sbaTip = true;
+    if (ev && ev.event && ev.event.clientX != null) placeTip(ev.event.clientX, ev.event.clientY);
+  }
+  function hideTip(gd) {
+    if (tip) tip.classList.remove("on");
+    gd._sbaTip = false;
+  }
+
   function onHover(gd, ev) {
     var pt = ev && ev.points && ev.points[0];
     if (!pt) return;
+    var meta = (pt.data && pt.data.meta) || (pt.fullData && pt.fullData.meta);
+    if (meta === "sba-tooltip") showTip(gd, pt, ev);
+    else hideTip(gd);
     var type = (pt.fullData || pt.data || {}).type;
     if (type !== "pie" && type !== "choropleth") return;
     var key = type + ":" + pt.curveNumber + ":" + (type === "pie" ? pt.pointNumber : pt.location);
@@ -125,8 +170,13 @@
     if (typeof gd.on !== "function" || !gd._ev || gd._sbaEv === gd._ev) return;
     gd._sbaEv = gd._ev; // re-bind if Plotly ever rebuilds the graph's event emitter
     gd.on("plotly_hover", function (ev) { onHover(gd, ev); });
-    gd.on("plotly_unhover", function () { clear(gd); });
+    gd.on("plotly_unhover", function () { clear(gd); hideTip(gd); });
     gd.on("plotly_afterplot", function () { reliftPie(gd); });
+    if (gd._sbaDom) return; // DOM listeners survive an event-emitter rebuild; add them once
+    gd._sbaDom = true;
+    // Plotly only re-emits hover when the hovered point changes, so the card follows the cursor here
+    gd.addEventListener("mousemove", function (e) { if (gd._sbaTip) placeTip(e.clientX, e.clientY); });
+    gd.addEventListener("mouseleave", function () { hideTip(gd); });
   }
 
   var queued = false;
